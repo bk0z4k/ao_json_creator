@@ -1,0 +1,21 @@
+{
+  "name": "test",
+  "sourceSpecialization": [],
+  "operations": [
+    {
+      "blockKey": "test@test.com",
+      "op": "patch",
+      "data": [
+        {
+          "op": "replace",
+          "path": "/test",
+          "value": {
+            "defaultPickStatusForOMS": "RequiresPicking",
+            "sendToOMS": false
+          }
+        }
+      ]
+    }
+  ],
+  "published": true
+}
