@@ -1,0 +1,21 @@
+{
+  "name": "CS.ColeHaan.sendToOMSFalse",
+  "sourceSpecialization": [],
+  "operations": [
+    {
+      "blockKey": "aptos.storeOmniChannel@0",
+      "op": "patch",
+      "data": [
+        {
+          "op": "replace",
+          "path": "/sendSaleProcessing",
+          "value": {
+            "defaultPickStatusForOMS": "RequiresPicking",
+            "sendToOMS": false
+          }
+        }
+      ]
+    }
+  ],
+  "published": true
+}

@@ -4,6 +4,7 @@ use serde_json::to_string_pretty;
 use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::process::Command;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Data {
@@ -59,6 +60,8 @@ struct MyApp {
     user_info: UserInfo,
     json_output: String,
     value_input: String,
+    domain: String,
+    filename: String,
 }
 
 impl Default for MyApp {
@@ -67,6 +70,8 @@ impl Default for MyApp {
             user_info: UserInfo::default(),
             json_output: "".to_owned(),
             value_input: "".to_owned(),
+            domain: "".to_owned(),
+            filename: "user_info.json".to_owned(),
         }
     }
 }
@@ -75,6 +80,9 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Enter user information");
+
+            ui.label("Domain:");
+            ui.text_edit_singleline(&mut self.domain);
 
             ui.label("Name: ");
             ui.text_edit_singleline(&mut self.user_info.name);
@@ -128,6 +136,8 @@ impl eframe::App for MyApp {
             ui.checkbox(&mut self.user_info.published, "Publish?");
 
             if ui.button("Create JSON").clicked() {
+                let filename = format!("{}.json", self.user_info.name);
+                self.filename = filename.clone();
                 if self.user_info.name.trim().is_empty() {
                     self.json_output = "Error: Name is required.".to_string();
                     return;
@@ -153,9 +163,18 @@ impl eframe::App for MyApp {
                                         format!("Error creating JSON: {}", err)
                                     }
                                 };
-                            let filename =
-                                format!("{}.json", self.user_info.name);
-                            save_to_file(&filename, &self.json_output);
+                            match self
+                                .save_to_file(&filename, &self.json_output)
+                            {
+                                Ok(_) => {
+                                    self.json_output =
+                                        "JSON file saved.".to_string()
+                                }
+                                Err(e) => {
+                                    self.json_output =
+                                        format!("Failed to save file: {}", e)
+                                }
+                            }
                         } else {
                             self.json_output =
                                 "Error: Block Key must contain '@'".to_string();
@@ -165,6 +184,19 @@ impl eframe::App for MyApp {
                         println! {"Parsing error: {}:", e};
                         self.json_output =
                             "Error: Invalid JSON in value field".to_string();
+                    }
+                }
+            }
+
+            if ui.button("Post Change-Set").clicked() {
+                match self.execute_command() {
+                    Ok(_) => {
+                        ui.ctx().request_repaint();
+                    }
+                    Err(e) => {
+                        self.json_output =
+                            format!("Failed to execute command: {}", e);
+                        ui.ctx().request_repaint();
                     }
                 }
             }
@@ -184,9 +216,40 @@ impl eframe::App for MyApp {
     }
 }
 
-fn save_to_file(filename: &str, data: &str) {
-    let mut file = File::create(filename).expect("Failed to create file");
-    file.write_all(data.as_bytes())
-        .expect("Failed to write to file");
-    println!("Data saved to {}", filename)
+impl MyApp {
+    fn execute_command(&mut self) -> Result<(), std::io::Error> {
+        let output = Command::new("cmd")
+            .args(&[
+                "/C",
+                "ao-config",
+                "change-set",
+                "post",
+                &self.filename,
+                "-d",
+                &self.domain,
+            ])
+            .output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let guid = stdout.trim();
+            println!("GUID: {}", guid);
+            self.json_output = format!("{}", guid);
+            Ok(())
+        } else {
+            eprintln!("Command failed to execute.");
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Command execution failed",
+            ))
+        }
+    }
+
+    fn save_to_file(&self, filename: &str, data: &str) -> std::io::Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(data.as_bytes())?;
+        println!("Data saved to {}", filename);
+        Ok(())
+    }
 }
