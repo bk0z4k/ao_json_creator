@@ -48,7 +48,11 @@ impl Default for UserInfo {
 }
 
 fn main() {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_resizable(false),
+        ..Default::default()
+    };
+
     eframe::run_native(
         "JSON Creator",
         options,
@@ -77,139 +81,172 @@ impl Default for MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Enter user information");
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.add_space(10.0);
 
-            ui.label("Domain:");
-            ui.text_edit_singleline(&mut self.domain);
+                ui.horizontal(|ui| {
+                    ui.label("Domain:");
+                    ui.text_edit_singleline(&mut self.domain);
+                });
 
-            ui.label("Name: ");
-            ui.text_edit_singleline(&mut self.user_info.name);
+                ui.horizontal(|ui| {
+                    ui.label("Name: ");
+                    ui.text_edit_singleline(&mut self.user_info.name);
+                });
 
-            ui.label("Block Key:");
-            ui.text_edit_singleline(&mut self.user_info.operations[0].blockKey);
-
-            ui.label("Operation:");
-            egui::ComboBox::from_label("Select operation")
-                .selected_text(&self.user_info.operations[0].data[0].op)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut self.user_info.operations[0].data[0].op,
-                        "add".to_string(),
-                        "add",
-                    );
-                    ui.selectable_value(
-                        &mut self.user_info.operations[0].data[0].op,
-                        "patch".to_string(),
-                        "patch",
-                    );
-                    ui.selectable_value(
-                        &mut self.user_info.operations[0].data[0].op,
-                        "remove".to_string(),
-                        "remove",
-                    );
-                    ui.selectable_value(
-                        &mut self.user_info.operations[0].data[0].op,
-                        "replace".to_string(),
-                        "replace",
+                ui.horizontal(|ui| {
+                    ui.label("Block Key:");
+                    ui.text_edit_singleline(
+                        &mut self.user_info.operations[0].blockKey,
                     );
                 });
 
-            ui.label("Path:");
-            ui.text_edit_singleline(
-                &mut self.user_info.operations[0].data[0].path,
-            );
+                ui.horizontal(|ui| {
+                    ui.label("Operation:");
+                    egui::ComboBox::from_label("Select operation")
+                        .selected_text(&self.user_info.operations[0].data[0].op)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.user_info.operations[0].data[0].op,
+                                "add".to_string(),
+                                "add",
+                            );
+                            ui.selectable_value(
+                                &mut self.user_info.operations[0].data[0].op,
+                                "patch".to_string(),
+                                "patch",
+                            );
+                            ui.selectable_value(
+                                &mut self.user_info.operations[0].data[0].op,
+                                "remove".to_string(),
+                                "remove",
+                            );
+                            ui.selectable_value(
+                                &mut self.user_info.operations[0].data[0].op,
+                                "replace".to_string(),
+                                "replace",
+                            );
+                        });
+                });
 
-            ui.label("Value (as JSON):");
-            egui::ScrollArea::vertical()
-                .id_source("value_input_scroll_area")
-                .max_height(275.0) // Limit the height of the input area
-                .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Path:");
+                    ui.text_edit_singleline(
+                        &mut self.user_info.operations[0].data[0].path,
+                    );
+                });
+
+                ui.label("Value (as JSON):");
+                egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.add(
                         egui::TextEdit::multiline(&mut self.value_input)
-                            .desired_rows(18)
-                            .frame(true),
+                            .desired_width(ui.available_width())
+                            .desired_rows(
+                                (ui.available_height() / 20.0) as usize,
+                            ),
                     );
                 });
 
-            ui.checkbox(&mut self.user_info.published, "Publish?");
+                ui.checkbox(&mut self.user_info.published, "Publish?");
 
-            if ui.button("Create JSON").clicked() {
-                let filename = format!("{}.json", self.user_info.name);
-                self.filename = filename.clone();
-                if self.user_info.name.trim().is_empty() {
-                    self.json_output = "Error: Name is required.".to_string();
-                    return;
-                }
-                if !self.user_info.operations[0].data[0].path.starts_with('/') {
-                    self.json_output =
-                        "Error: Path must start with '/'.".to_string();
-                    return;
-                }
-
-                println!("Raw input: {}", self.value_input);
-
-                match serde_json::from_str(&self.value_input) {
-                    Ok(parsed_value) => {
-                        println!("Parsed value: {:?}", parsed_value);
-                        self.user_info.operations[0].data[0].value =
-                            parsed_value;
-                        if self.user_info.operations[0].blockKey.contains('@') {
+                ui.horizontal(|ui| {
+                    if ui.button("Create JSON").clicked() {
+                        let filename = format!("{}.json", self.user_info.name);
+                        self.filename = filename.clone();
+                        if self.user_info.name.trim().is_empty() {
                             self.json_output =
-                                match to_string_pretty(&self.user_info) {
-                                    Ok(json) => json,
-                                    Err(err) => {
-                                        format!("Error creating JSON: {}", err)
+                                "Error: Name is required.".to_string();
+                            return;
+                        }
+                        if !self.user_info.operations[0].data[0]
+                            .path
+                            .starts_with('/')
+                        {
+                            self.json_output =
+                                "Error: Path must start with '/'.".to_string();
+                            return;
+                        }
+
+                        println!("Raw input: {}", self.value_input);
+
+                        match serde_json::from_str(&self.value_input) {
+                            Ok(parsed_value) => {
+                                println!("Parsed value: {:?}", parsed_value);
+                                self.user_info.operations[0].data[0].value =
+                                    parsed_value;
+                                if self.user_info.operations[0]
+                                    .blockKey
+                                    .contains('@')
+                                {
+                                    self.json_output =
+                                        match to_string_pretty(&self.user_info)
+                                        {
+                                            Ok(json) => json,
+                                            Err(err) => {
+                                                format!(
+                                                    "Error creating JSON: {}",
+                                                    err
+                                                )
+                                            }
+                                        };
+                                    match self.save_to_file(
+                                        &filename,
+                                        &self.json_output,
+                                    ) {
+                                        Ok(_) => {
+                                            self.json_output =
+                                                "JSON file saved.".to_string()
+                                        }
+                                        Err(e) => {
+                                            self.json_output = format!(
+                                                "Failed to save file: {}",
+                                                e
+                                            )
+                                        }
                                     }
-                                };
-                            match self
-                                .save_to_file(&filename, &self.json_output)
-                            {
-                                Ok(_) => {
+                                } else {
                                     self.json_output =
-                                        "JSON file saved.".to_string()
-                                }
-                                Err(e) => {
-                                    self.json_output =
-                                        format!("Failed to save file: {}", e)
+                                        "Error: Block Key must contain '@'"
+                                            .to_string();
                                 }
                             }
-                        } else {
-                            self.json_output =
-                                "Error: Block Key must contain '@'".to_string();
+                            Err(e) => {
+                                println! {"Parsing error: {}:", e};
+                                self.json_output =
+                                    "Error: Invalid JSON in value field"
+                                        .to_string();
+                            }
                         }
                     }
-                    Err(e) => {
-                        println! {"Parsing error: {}:", e};
-                        self.json_output =
-                            "Error: Invalid JSON in value field".to_string();
-                    }
-                }
-            }
 
-            if ui.button("Post Change-Set").clicked() {
-                match self.execute_command() {
-                    Ok(_) => {
-                        ui.ctx().request_repaint();
+                    if ui.button("Post Change-Set").clicked() {
+                        match self.execute_command() {
+                            Ok(_) => {
+                                ui.ctx().request_repaint();
+                            }
+                            Err(e) => {
+                                self.json_output =
+                                    format!("Failed to execute command: {}", e);
+                                ui.ctx().request_repaint();
+                            }
+                        }
                     }
-                    Err(e) => {
-                        self.json_output =
-                            format!("Failed to execute command: {}", e);
-                        ui.ctx().request_repaint();
-                    }
-                }
-            }
+                });
+            });
 
             ui.label("JSON Output:");
             egui::ScrollArea::vertical()
                 .id_source("json_output_scroll_area")
-                .max_height(75.0) // Limit the height of the input area
                 .show(ui, |ui| {
                     ui.add(
                         egui::TextEdit::multiline(&mut self.json_output)
-                            .desired_rows(5)
-                            .frame(true),
+                            .frame(true)
+                            .desired_width(ui.available_width())
+                            .desired_rows(
+                                (ui.available_height() / 20.0) as usize,
+                            ),
                     );
                 });
         });
