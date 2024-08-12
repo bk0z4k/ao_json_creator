@@ -1,6 +1,6 @@
 [package]
 name = "ao_json_creator"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Bilal Kozak bkozak@aptos.com"]
 edition = "2021"
 description = "This project will facilitate deploying changes to AO platform"
