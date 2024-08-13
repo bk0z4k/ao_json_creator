@@ -1,6 +1,8 @@
 use eframe::egui;
+use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
+use std::f32::INFINITY;
 use std::fs::File;
 use std::io;
 use std::io::Write;
@@ -87,11 +89,6 @@ impl eframe::App for MyApp {
                 ui.add_space(10.0);
 
                 ui.horizontal(|ui| {
-                    ui.label("Domain:");
-                    ui.text_edit_singleline(&mut self.domain);
-                });
-
-                ui.horizontal(|ui| {
                     ui.label("Name: ");
                     ui.text_edit_singleline(&mut self.user_info.name);
                 });
@@ -139,22 +136,23 @@ impl eframe::App for MyApp {
                 });
 
                 ui.label("Value (as JSON):");
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.add(
-                        egui::TextEdit::multiline(&mut self.value_input)
-                            .desired_width(ui.available_width())
-                            .desired_rows(
-                                (ui.available_height() / 20.0) as usize,
-                            ),
-                    );
-                });
+                egui::ScrollArea::vertical()
+                    .max_height((ui.available_height() / 1.66) as f32)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.value_input)
+                                .desired_width(ui.available_width())
+                                .desired_rows(
+                                    (ui.available_height() / 20.0) as usize,
+                                ),
+                        );
+                    });
 
                 ui.checkbox(&mut self.user_info.published, "Publish?");
 
                 ui.horizontal(|ui| {
-                    if ui.button("Create JSON").clicked() {
-                        let filename = format!("{}.json", self.user_info.name);
-                        self.filename = filename.clone();
+                    if ui.button("Create Change-Set").clicked() {
+                        // Perform validation first
                         if self.user_info.name.trim().is_empty() {
                             self.json_output =
                                 "Error: Name is required.".to_string();
@@ -168,72 +166,75 @@ impl eframe::App for MyApp {
                                 "Error: Path must start with '/'.".to_string();
                             return;
                         }
+                        if !self.user_info.operations[0].blockKey.contains('@')
+                        {
+                            self.json_output =
+                                "Error: Block Key must contain '@'."
+                                    .to_string();
+                            return;
+                        }
 
-                        println!("Raw input: {}", self.value_input);
-
+                        // Validate the JSON input
                         match serde_json::from_str(&self.value_input) {
                             Ok(parsed_value) => {
-                                println!("Parsed value: {:?}", parsed_value);
                                 self.user_info.operations[0].data[0].value =
                                     parsed_value;
-                                if self.user_info.operations[0]
-                                    .blockKey
-                                    .contains('@')
-                                {
-                                    self.json_output =
-                                        match to_string_pretty(&self.user_info)
-                                        {
-                                            Ok(json) => json,
-                                            Err(err) => {
-                                                format!(
-                                                    "Error creating JSON: {}",
-                                                    err
-                                                )
-                                            }
-                                        };
-                                    match self.save_to_file(
-                                        &filename,
-                                        &self.json_output,
-                                    ) {
-                                        Ok(_) => {
-                                            self.json_output =
-                                                "JSON file saved.".to_string()
-                                        }
-                                        Err(e) => {
-                                            self.json_output = format!(
-                                                "Failed to save file: {}",
-                                                e
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    self.json_output =
-                                        "Error: Block Key must contain '@'"
-                                            .to_string();
-                                }
                             }
                             Err(e) => {
-                                println! {"Parsing error: {}:", e};
-                                self.json_output =
-                                    "Error: Invalid JSON in value field"
-                                        .to_string();
+                                self.json_output = format!(
+                                    "Error: Invalid JSON in value field: {}",
+                                    e
+                                );
+                                return;
                             }
                         }
-                    }
 
-                    if ui.button("Post Change-Set").clicked() {
-                        match self.execute_command() {
-                            Ok(_) => {
-                                ui.ctx().request_repaint();
-                            }
-                            Err(e) => {
-                                self.json_output =
-                                    format!("Failed to execute command: {}", e);
-                                ui.ctx().request_repaint();
+                        // Open the file dialog if all validation passes
+                        if let Some(path) = FileDialog::new().save_file() {
+                            let filename = path.display().to_string();
+                            self.filename = filename.clone();
+                            println!("Saving to: {}", filename);
+
+                            self.json_output =
+                                match to_string_pretty(&self.user_info) {
+                                    Ok(json) => json,
+                                    Err(err) => {
+                                        format!("Error creating JSON: {}", err)
+                                    }
+                                };
+                            match self
+                                .save_to_file(&filename, &self.json_output)
+                            {
+                                Ok(_) => {
+                                    self.json_output =
+                                        "JSON file saved.".to_string();
+                                }
+                                Err(e) => {
+                                    self.json_output =
+                                        format!("Failed to save file: {}", e);
+                                }
                             }
                         }
                     }
                 });
+            });
+
+            ui.horizontal(|ui| {
+                if ui.button("Post Change-Set").clicked() {
+                    match self.execute_command() {
+                        Ok(_) => {
+                            ui.ctx().request_repaint();
+                        }
+                        Err(e) => {
+                            self.json_output =
+                                format!("Failed to execute command: {}", e);
+                            ui.ctx().request_repaint();
+                        }
+                    }
+                }
+
+                ui.label("Domain:");
+                ui.text_edit_singleline(&mut self.domain);
             });
 
             ui.label("JSON Output:");
@@ -245,7 +246,7 @@ impl eframe::App for MyApp {
                             .frame(true)
                             .desired_width(ui.available_width())
                             .desired_rows(
-                                (ui.available_height() / 20.0) as usize,
+                                (ui.available_height() / 50.0) as usize,
                             ),
                     );
                 });
@@ -255,30 +256,50 @@ impl eframe::App for MyApp {
 
 impl MyApp {
     fn execute_command(&mut self) -> Result<(), std::io::Error> {
-        let output = Command::new("cmd")
-            .args(&[
-                "/C",
-                "ao-config",
-                "change-set",
-                "post",
-                &self.filename,
-                "-d",
-                &self.domain,
-            ])
-            .output()?;
+        if self.domain.trim().is_empty() {
+            self.json_output = "Error: Domain field is empty.".to_string();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Domain field is empty",
+            ));
+        }
+        if let Some(path) = FileDialog::new().pick_file() {
+            let filename = path.display().to_string();
 
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let guid = stdout.trim();
-            println!("GUID: {}", guid);
-            self.json_output = format!("{}", guid);
-            Ok(())
+            let output = Command::new("cmd")
+                .args(&[
+                    "/C",
+                    "ao-config",
+                    "change-set",
+                    "post",
+                    &self.filename,
+                    "-d",
+                    &self.domain,
+                ])
+                .output()?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let guid = stdout.trim();
+                println!("GUID: {}", guid);
+                self.json_output = format!("{}", guid);
+                Ok(())
+            } else {
+                eprintln!("Command failed to execute.");
+                eprintln!(
+                    "stderr: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Command execution failed",
+                ))
+            }
         } else {
-            eprintln!("Command failed to execute.");
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            self.json_output = "No file selected.".to_string();
             Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "Command execution failed",
+                "File selection cancelled",
             ))
         }
     }

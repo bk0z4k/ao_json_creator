@@ -1,6 +1,6 @@
 [package]
 name = "ao_json_creator"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Bilal Kozak bkozak@aptos.com"]
 edition = "2021"
 description = "This project will facilitate deploying changes to AO platform"
@@ -12,3 +12,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 eframe = "0.28.1"
 egui = "0.28.1"
+rfd = "0.14.1"
